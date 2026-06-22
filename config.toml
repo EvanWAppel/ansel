@@ -1,0 +1,13 @@
+# ansel configuration
+#
+# Shortcuts are expanded at the keywords prompt. Entry is comma-separated and
+# shortcuts mix freely with freeform keywords:
+#   "g, f, beach day"  ->  guitar, food, beach day
+
+[shortcuts]
+g = "guitar"
+f = "food"
+t = "travel"
+n = "nature"
+p = "people"
+w = "work"

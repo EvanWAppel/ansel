@@ -5,3 +5,11 @@ __pycache__/
 .ruff_cache/
 photo_review.db
 dist/
+
+# Swift / Xcode (macapp)
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+macapp/App/build/
+*.app

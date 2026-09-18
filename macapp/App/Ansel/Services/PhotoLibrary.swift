@@ -1,5 +1,6 @@
 import AnselCore
 import AppKit
+import AVFoundation
 import Photos
 
 /// Reads the system Photos library via PhotoKit and adapts assets into the pure
@@ -67,6 +68,18 @@ final class PhotoLibrary {
             if let title = collection.localizedTitle { names.append(title) }
         }
         return names.sorted()
+    }
+
+    /// Load a playable item for a video asset (downloading from iCloud if needed).
+    func requestPlayerItem(for asset: PHAsset) async -> AVPlayerItem? {
+        await withCheckedContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .automatic
+            PHImageManager.default().requestPlayerItem(forVideo: asset, options: options) { item, _ in
+                continuation.resume(returning: item)
+            }
+        }
     }
 
     /// Load a display image for a photo or a poster frame for a video.

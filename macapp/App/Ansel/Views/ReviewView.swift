@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 /// The full-window review loop: photo on the left, metadata + caption/keyword
@@ -29,7 +30,9 @@ struct ReviewView: View {
     private var photoPane: some View {
         ZStack {
             Color.black.opacity(0.9)
-            if let image = vm.image {
+            if let player = vm.player {
+                VideoPlayer(player: player).padding(12)
+            } else if let image = vm.image {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
@@ -43,18 +46,6 @@ struct ReviewView: View {
                     Text("Preview unavailable")
                 }
                 .foregroundStyle(.white.opacity(0.6))
-            }
-            if vm.current?.isVideo == true {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Label("Video", systemImage: "video.fill")
-                            .padding(6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .padding(12)
-                        Spacer()
-                    }
-                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

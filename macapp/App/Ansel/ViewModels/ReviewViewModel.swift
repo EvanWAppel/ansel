@@ -1,5 +1,6 @@
 import AnselCore
 import AppKit
+import AVFoundation
 import Photos
 import SwiftUI
 
@@ -14,6 +15,7 @@ final class ReviewViewModel: ObservableObject {
 
     // Current photo display state
     @Published private(set) var image: NSImage?
+    @Published private(set) var player: AVPlayer?
     @Published private(set) var filename = ""
     @Published private(set) var albums: [String] = []
     @Published private(set) var existingCaption: String?
@@ -59,14 +61,57 @@ final class ReviewViewModel: ObservableObject {
         existingCaption = (try? writer.readDescription(localIdentifier: ref.localIdentifier)) ?? nil
         existingKeywords = (try? writer.readKeywords(localIdentifier: ref.localIdentifier)) ?? []
 
-        isLoadingImage = true
+        teardownPlayer()
         image = nil
-        let size = CGSize(width: 1600, height: 1600)
-        let loaded = await library.requestImage(for: asset, targetSize: size)
-        // Guard against a stale load if the user advanced quickly.
-        if current?.localIdentifier == ref.localIdentifier {
+        isLoadingImage = true
+
+        if ref.isVideo {
+            let item = await library.requestPlayerItem(for: asset)
+            // Guard against a stale load if the user advanced quickly.
+            guard current?.localIdentifier == ref.localIdentifier else { return }
+            if let item { setupPlayer(with: item) }
+            isLoadingImage = false
+        } else {
+            let size = CGSize(width: 1600, height: 1600)
+            let loaded = await library.requestImage(for: asset, targetSize: size)
+            guard current?.localIdentifier == ref.localIdentifier else { return }
             image = loaded
             isLoadingImage = false
+        }
+    }
+
+    // MARK: - Video playback
+
+    private var loopObserver: NSObjectProtocol?
+
+    private func setupPlayer(with item: AVPlayerItem) {
+        let player = AVPlayer(playerItem: item)
+        loopObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.restartPlayback() }
+        }
+        self.player = player
+        player.play()
+    }
+
+    private func restartPlayback() {
+        player?.seek(to: .zero)
+        player?.play()
+    }
+
+    private func teardownPlayer() {
+        player?.pause()
+        if let loopObserver {
+            NotificationCenter.default.removeObserver(loopObserver)
+        }
+        loopObserver = nil
+        player = nil
+    }
+
+    deinit {
+        if let loopObserver {
+            NotificationCenter.default.removeObserver(loopObserver)
         }
     }
 

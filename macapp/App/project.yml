@@ -1,0 +1,48 @@
+# XcodeGen spec for the Ansel Mac app.
+#
+# Regenerate the .xcodeproj with:  xcodegen generate   (brew install xcodegen)
+# then open Ansel.xcodeproj in Xcode and run. The pure logic lives in the
+# AnselCore Swift package (../AnselCore); this target is the SwiftUI +
+# PhotoKit + AppleScript app shell.
+
+name: Ansel
+options:
+  bundleIdPrefix: com.evanappel
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  AnselCore:
+    path: ../AnselCore
+
+targets:
+  Ansel:
+    type: application
+    platform: macOS
+    sources:
+      - path: Ansel
+    dependencies:
+      - package: AnselCore
+        product: AnselCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.evanappel.ansel
+        PRODUCT_NAME: Ansel
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        # PhotoKit access prompt rationale.
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription:
+          "Ansel reads your photos so you can caption and tag them."
+        # Automation prompt rationale — writes go through AppleScript to Photos.
+        INFOPLIST_KEY_NSAppleEventsUsageDescription:
+          "Ansel controls Photos to save the captions and keywords you enter."
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.photography"
+        # Personal, local build: no sandbox (AppleScript-to-Photos + PhotoKit
+        # work without sandbox exceptions), no hardened runtime, ad-hoc signing.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"

@@ -50,6 +50,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleVersion</key>         <string>1</string>
     <key>LSMinimumSystemVersion</key>  <string>13.0</string>
     <key>NSHighResolutionCapable</key> <true/>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
+    <key>CFBundleIconName</key>        <string>AppIcon</string>
     <key>NSPrincipalClass</key>        <string>NSApplication</string>
     <key>LSApplicationCategoryType</key> <string>public.app-category.photography</string>
     <key>NSPhotoLibraryUsageDescription</key>
@@ -61,6 +63,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+echo "▶ Installing app icon …"
+cp "$HERE/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 echo "▶ Ad-hoc code-signing …"
 codesign --force --sign - --timestamp=none "$APP" >/dev/null

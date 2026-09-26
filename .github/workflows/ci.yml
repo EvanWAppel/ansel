@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python — pytest + ruff
+    # macOS runner: osxphotos, photoscript, and pyobjc (AppKit) are macOS-only.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Test (pytest)
+        # Pure-logic tests only — they never touch a real Photos library.
+        run: uv run python -m pytest
+
+  swift:
+    name: Swift — AnselCore checks
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run AnselCore check suite
+        working-directory: macapp/AnselCore
+        run: swift run ansel-core-check

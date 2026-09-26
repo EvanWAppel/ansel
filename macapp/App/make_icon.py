@@ -10,7 +10,6 @@ Output: AppIcon.png (1024x1024) in the same directory.
 """
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -61,7 +60,7 @@ def draw_moon(img: Image.Image) -> None:
 def ridge(width: int, base_y: int, peaks: list[tuple[float, float]]) -> list[tuple[int, int]]:
     """Build a closed mountain polygon from (x_frac, y_frac) ridge points."""
     pts = [(int(x * width), int(y * S)) for x, y in peaks]
-    return [(0, base_y)] + pts + [(width, base_y), (width, S), (0, S)]
+    return [(0, base_y), *pts, (width, base_y), (width, S), (0, S)]
 
 
 def draw_mountains(img: Image.Image) -> None:

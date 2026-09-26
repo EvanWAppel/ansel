@@ -1,14 +1,30 @@
 # ansel
 
-Incrementally caption and tag your macOS Photos library from the terminal,
-in short sessions spread over months. Progress lives in a local SQLite
-database keyed by photo UUID, so you can quit at any time — including
-Ctrl-C — and pick up exactly where you left off.
+[![CI](https://github.com/EvanWAppel/ansel/actions/workflows/ci.yml/badge.svg)](https://github.com/EvanWAppel/ansel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Incrementally caption and tag your macOS Photos library — in short sessions
+spread over months — without ever losing your place. Progress lives in a local
+SQLite database keyed by photo UUID, so you can quit at any time (including
+Ctrl-C) and pick up exactly where you left off. It ships as **both a terminal
+CLI and a native SwiftUI/PhotoKit macOS app** that share the same progress
+database, so months of review carry over between them.
 
 Reads go through [osxphotos](https://github.com/RhetTbull/osxphotos); writes
 go through [photoscript](https://github.com/RhetTbull/PhotoScript)'s
 AppleScript bridge, so captions and keywords are real Photos edits that sync
 with iCloud.
+
+> **Demo:** _screenshots / GIF coming soon_ — a CLI review session and the
+> native app's review pane. (Placeholder; add media under `docs/` and link here.)
+
+Two front-ends, one schema:
+
+- **CLI** (Python) — this README.
+- **Native macOS app** (SwiftUI + PhotoKit) — see [`macapp/README.md`](macapp/README.md).
+
+Design rationale and the key trade-offs are written up in
+[`DECISIONS.md`](DECISIONS.md).
 
 ## Setup
 

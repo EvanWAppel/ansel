@@ -22,6 +22,8 @@ Two front-ends, one schema:
 - **CLI** (Python) — this README.
 - **Native macOS app** (SwiftUI + PhotoKit) — see [`macapp/README.md`](macapp/README.md).
 
+![Ansel native macOS app — review pane](docs/app-review.png)
+
 Design rationale and the key trade-offs are written up in
 [`DECISIONS.md`](DECISIONS.md).
 

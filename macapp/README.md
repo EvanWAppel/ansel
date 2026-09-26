@@ -6,6 +6,10 @@ your Photos library through **PhotoKit**; writes captions and keywords through
 fields — PhotoKit can set `favorite`/`hidden`/`date`/`location` but not
 description or keywords). No Python at runtime.
 
+| Start a session | Review pane |
+| --- | --- |
+| ![Ansel start screen — session modes and progress](../docs/app-start.png) | ![Ansel review pane — photo with caption and keyword fields](../docs/app-review.png) |
+
 ## Layout
 
 ```

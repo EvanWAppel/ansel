@@ -15,8 +15,7 @@ go through [photoscript](https://github.com/RhetTbull/PhotoScript)'s
 AppleScript bridge, so captions and keywords are real Photos edits that sync
 with iCloud.
 
-> **Demo:** _screenshots / GIF coming soon_ — a CLI review session and the
-> native app's review pane. (Placeholder; add media under `docs/` and link here.)
+![ansel CLI — a tour of the command surface](docs/cli-demo.gif)
 
 Two front-ends, one schema:
 

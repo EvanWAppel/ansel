@@ -26,17 +26,23 @@ existing progress carry over (see "Reusing existing progress" below).
 
 ## Build & run
 
-Requires **Xcode** (not just Command Line Tools). Once installed:
+**No Xcode required.** `build.sh` compiles the SwiftUI + PhotoKit app with the
+Command Line Tools toolchain (`swiftc`), links `AnselCore`, assembles the `.app`
+bundle (icon included), and ad-hoc code-signs it:
 
 ```sh
-# 1. Verify the pure logic (works with Command Line Tools alone):
+# 1. Verify the pure logic:
 cd macapp/AnselCore && swift run ansel-core-check
 
-# 2. Generate the Xcode project (one-time; needs `brew install xcodegen`):
-cd macapp/App && xcodegen generate
+# 2. Build the app (Command Line Tools only — no Xcode, no XcodeGen):
+cd macapp/App && ./build.sh
+open build/Ansel.app
+```
 
-# 3. Open and run:
-open Ansel.xcodeproj      # then ⌘R in Xcode
+Prefer Xcode? Generate a project instead (needs `brew install xcodegen`):
+
+```sh
+cd macapp/App && xcodegen generate && open Ansel.xcodeproj   # then ⌘R
 ```
 
 No XcodeGen? Create a new **macOS App** target in Xcode, add the `App/Ansel`
@@ -76,8 +82,8 @@ in Photos — Photos' scripting interface can't delete media directly.
 ## Status
 
 - ✅ `AnselCore` — implemented, 40 checks passing (`swift run ansel-core-check`).
-- ✅ App layer — implemented; type-checks against the macOS SDK (Swift 6, macOS 13
-  target). Not yet built/run — needs Xcode (tracked in `../BLOCKED.md`).
-- ⬜ Once Xcode is in: generate project, run, verify the live PhotoKit read /
-  AppleScript write paths against a real library; then convert `AnselCoreCheck`
-  into idiomatic `import Testing` suites.
+- ✅ App layer — implemented and **builds** via `build.sh` (Command Line Tools
+  only; no Xcode needed), assembled into a signed `Ansel.app` with app icon.
+- ⬜ Live end-to-end run against a real Photos library — verify the PhotoKit read
+  and AppleScript write paths on device; then convert `AnselCoreCheck` into
+  idiomatic `import Testing` suites.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random as random_module
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -30,14 +30,17 @@ LOADING_MESSAGE = "Loading Photos library (this can take a moment)…"
 
 
 def _load_photos(month: str | None) -> list[osxphotos.PhotoInfo]:
-    """Load the Photos library, optionally filtered to one YYYY-MM month, sorted by date."""
+    """Load the Photos library, optionally filtered to one YYYY-MM month, sorted by date.
+
+    Undated photos sort last.
+    """
     from ansel.photos import load_library  # deferred: importing osxphotos is slow
 
     click.echo(LOADING_MESSAGE, err=True)
     photos = load_library()
     if month is not None:
         photos = [p for p in photos if p.date and report.month_key(p.date) == month]
-    photos.sort(key=lambda p: p.date)
+    photos.sort(key=lambda p: (p.date is None, p.date or datetime.min))
     return photos
 
 

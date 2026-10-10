@@ -53,11 +53,6 @@ class FakePreview:
 
 
 @pytest.fixture
-def conn(tmp_path: Path):
-    return db.connect(tmp_path / "review.db")
-
-
-@pytest.fixture
 def config() -> Config:
     return Config(shortcuts={"g": "guitar", "t": "travel"})
 

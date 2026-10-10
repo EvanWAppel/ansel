@@ -8,19 +8,7 @@ Development is TDD: write a failing test, make it pass, refactor. Pure-logic
 tests never touch the Photos library; the AppleScript bridge and preview
 machinery are mocked (see `tests/test_review.py` for the pattern).
 
-## P1 — export & machine-readable output
-
-- **`ansel export --csv [PATH]`** — dump the progress DB (`uuid, status,
-  caption, keywords, error, reviewed_at`) to CSV for spreadsheet review or
-  backup. Pure DB read; add a `db.rows()` accessor and a `csv`-module writer,
-  test against a temp DB. Default to stdout when no path is given.
-- **`ansel stats --stats-json`** — emit the same totals + per-month breakdown
-  `stats` prints, but as a single JSON object, so progress can be charted or
-  diffed over time. Refactor the aggregation in `cli.stats` into a pure
-  `build_stats(photos, statuses) -> dict` helper (unit-testable without a
-  library), then have the text and JSON renderers share it.
-
-## P2 — error ergonomics
+## P1 — error ergonomics
 
 - **Better AppleScript error messages.** Bridge failures currently surface the
   raw exception string (`write_metadata` / `mark_for_deletion` → status
@@ -37,7 +25,7 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   `ansel errors` to list them, so failures aren't invisible until the next
   session.
 
-## P3 — scale
+## P2 — scale
 
 - **10k+ library profiling.** `_load_photos` loads the whole library and sorts
   in memory on every command (`review`, `chunk`, `stats`, `random`). Profile
@@ -50,7 +38,7 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   - a progress indicator during the initial load (currently a single "this can
     take a moment" line).
 
-## P4 — nice-to-haves
+## P3 — nice-to-haves
 
 - **Undo the last action** — an `ansel undo` that reverts the most recent
   `record`/write within a session (caption written to Photos can't be un-written
@@ -68,3 +56,9 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
 - ✅ Added `tests/test_review.py` — integration coverage for the full
   `run_session()` loop (caption + keywords, skip, delete, quit, bridge-write
   and mark-for-deletion errors, preview open/close, missing-original preview).
+- ✅ `ansel export --csv [PATH]` — dumps the progress DB (`db.COLUMNS`, oldest
+  review first) as CSV; stdout when no path is given.
+- ✅ `ansel stats --json` (renamed from the planned `--stats-json`) — stats
+  aggregation moved into a pure `report.build_stats()` shared by the text and
+  JSON renderers. The "Loading Photos library…" line now goes to stderr so
+  stdout stays machine-readable.

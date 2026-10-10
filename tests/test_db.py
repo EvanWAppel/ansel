@@ -11,11 +11,6 @@ from ansel import db
 WEEK = timedelta(days=7)
 
 
-@pytest.fixture
-def conn(tmp_path: Path) -> sqlite3.Connection:
-    return db.connect(tmp_path / "test.db")
-
-
 def test_record_and_reviewed_uuids(conn: sqlite3.Connection) -> None:
     db.record(conn, "uuid-1", "done", caption="A dog", keywords=["dog", "park"])
     db.record(conn, "uuid-2", "skipped")
@@ -103,3 +98,18 @@ def test_commit_survives_new_connection(tmp_path: Path) -> None:
     conn.close()
     reopened = db.connect(path)
     assert db.reviewed_uuids(reopened) == {"uuid-1"}
+
+
+def test_rows_returns_every_column_oldest_first(conn: sqlite3.Connection) -> None:
+    db.record(conn, "uuid-1", "done", caption="A dog", keywords=["dog", "park"])
+    db.record(conn, "uuid-2", "error", error="bridge timeout")
+    rows = db.rows(conn)
+    assert [row[:5] for row in rows] == [
+        ("uuid-1", "done", "A dog", "dog, park", None),
+        ("uuid-2", "error", None, None, "bridge timeout"),
+    ]
+    assert all(datetime.fromisoformat(row[5]) for row in rows)
+
+
+def test_rows_empty_db(conn: sqlite3.Connection) -> None:
+    assert db.rows(conn) == []

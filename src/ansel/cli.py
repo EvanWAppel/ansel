@@ -1,16 +1,17 @@
-"""Command-line interface: review, chunk, stats, redo."""
+"""Command-line interface: review, random, chunk, stats, export, redo."""
 
 from __future__ import annotations
 
+import json
 import random as random_module
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 import click
 
-from ansel import db
+from ansel import db, report
 from ansel.config import ensure_config, load_config
 from ansel.review import run_session
 
@@ -24,19 +25,18 @@ SKIP_RESURFACE_WINDOW = timedelta(days=7)
 
 _MONTH_RE = re.compile(r"\d{4}-\d{2}")
 
-
-def _month_key(date: datetime) -> str:
-    return f"{date.year:04d}-{date.month:02d}"
+# Goes to stderr so machine-readable stdout (e.g. ``stats --json``) stays clean.
+LOADING_MESSAGE = "Loading Photos library (this can take a moment)…"
 
 
 def _load_photos(month: str | None) -> list[osxphotos.PhotoInfo]:
     """Load the Photos library, optionally filtered to one YYYY-MM month, sorted by date."""
     from ansel.photos import load_library  # deferred: importing osxphotos is slow
 
-    click.echo("Loading Photos library (this can take a moment)…")
+    click.echo(LOADING_MESSAGE, err=True)
     photos = load_library()
     if month is not None:
-        photos = [p for p in photos if p.date and _month_key(p.date) == month]
+        photos = [p for p in photos if p.date and report.month_key(p.date) == month]
     photos.sort(key=lambda p: p.date)
     return photos
 
@@ -106,42 +106,49 @@ def chunk(month: str) -> None:
 
 
 @main.command()
-def stats() -> None:
+@click.option("--json", "as_json", is_flag=True, help="Emit the stats as one JSON object.")
+def stats(as_json: bool) -> None:
     """Show overall progress and a per-month breakdown."""
     conn = db.connect(DB_PATH)
-    statuses = db.all_statuses(conn)
-    photos = _load_photos(None)
+    summary = report.build_stats(_load_photos(None), db.all_statuses(conn))
+    if as_json:
+        click.echo(json.dumps(summary, indent=2))
+        return
 
-    total = len(photos)
-    overall = dict.fromkeys(db.STATUSES, 0)
-    months: dict[str, dict[str, int]] = {}
-    for photo in photos:
-        key = _month_key(photo.date) if photo.date else "unknown"
-        bucket = months.setdefault(key, {"total": 0, **dict.fromkeys(db.STATUSES, 0)})
-        bucket["total"] += 1
-        status = statuses.get(photo.uuid)
-        if status in overall:
-            overall[status] += 1
-            bucket[status] += 1
-
-    remaining = total - sum(overall.values())
-    click.echo(f"\nTotal photos: {total}")
+    overall = summary["overall"]
+    click.echo(f"\nTotal photos: {summary['total']}")
     click.echo(
         f"  done: {overall['done']}   skipped: {overall['skipped']}"
         f"   to-delete: {overall['delete']}   errors: {overall['error']}"
-        f"   remaining: {remaining}"
+        f"   remaining: {summary['remaining']}"
     )
     click.echo(
         f"\n{'Month':<10}{'Total':>8}{'Done':>8}{'Skipped':>9}"
         f"{'Delete':>8}{'Errors':>8}{'Left':>8}"
     )
-    for key in sorted(months):
-        b = months[key]
-        left = b["total"] - sum(b[s] for s in db.STATUSES)
+    for key, b in summary["months"].items():
         click.echo(
             f"{key:<10}{b['total']:>8}{b['done']:>8}{b['skipped']:>9}"
-            f"{b['delete']:>8}{b['error']:>8}{left:>8}"
+            f"{b['delete']:>8}{b['error']:>8}{b['remaining']:>8}"
         )
+
+
+@main.command()
+@click.option(
+    "--csv",
+    "csv_out",
+    is_flag=False,
+    flag_value="-",
+    default=None,
+    type=click.File("w", encoding="utf-8"),
+    metavar="[PATH]",
+    help="Write the progress DB as CSV to PATH (stdout if PATH is omitted).",
+)
+def export(csv_out: TextIO | None) -> None:
+    """Export the progress DB for spreadsheet review or backup."""
+    if csv_out is None:
+        raise click.UsageError("choose an export format, e.g. --csv [PATH]")
+    report.write_csv(db.rows(db.connect(DB_PATH)), csv_out)
 
 
 @main.command()

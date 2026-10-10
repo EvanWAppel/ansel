@@ -255,3 +255,51 @@ def test_missing_original_skips_preview(conn, config, spy_photos, scripted_promp
     # No preview opened when there's no viewable path, but review still proceeds.
     assert spy_photos.calls["opened"] == []
     assert db.all_statuses(conn) == {"uuid-1": "skipped"}
+
+
+def test_write_failure_leads_with_the_fix(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raw = (
+        "run_script 'photoSetDescription' failed:"
+        " Not authorized to send Apple events to Photos. (-1743)"
+    )
+    spy_photos.write_error = RuntimeError(raw)
+    scripted_prompts(["caption one", ""])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "Privacy & Security → Automation" in out
+    assert raw in out
+    assert out.index("Automation") < out.index(raw)
+    assert "ansel redo uuid-1" in out
+    # The DB keeps the raw message untouched, for `redo` diagnosis and the mac app.
+    assert db.all_statuses(conn) == {"uuid-1": "error"}
+    assert conn.execute("SELECT error FROM reviews").fetchone() == (raw,)
+
+
+def test_gone_photo_does_not_suggest_redo(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spy_photos.mark_error = ValueError("Invalid photo id: uuid-1")
+    scripted_prompts(["d"])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "no longer in your Photos library" in out
+    assert "ansel redo" not in out
+
+
+def test_unknown_failure_keeps_original_message(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spy_photos.write_error = RuntimeError("bridge timeout")
+    scripted_prompts(["caption one", ""])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "write failed (bridge timeout)" in out
+    assert "ansel redo uuid-1" in out

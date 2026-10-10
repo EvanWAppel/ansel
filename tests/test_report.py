@@ -5,6 +5,8 @@ import io
 from datetime import datetime
 from types import SimpleNamespace
 
+import pytest
+
 from ansel import db, report
 
 
@@ -90,3 +92,44 @@ def test_write_csv_empty_still_writes_header() -> None:
     out = io.StringIO()
     report.write_csv([], out)
     assert out.getvalue() == "uuid,status,caption,keywords,error,reviewed_at\n"
+
+
+# Representative bridge failures: photoscript wraps py-applescript's ScriptError
+# (message + " (<errno>)") as AppleScriptError("run_script '<name>' failed: ..."),
+# and raises ValueError("Invalid photo id: ...") when the photo is gone.
+NOT_AUTHORIZED = (
+    "run_script 'photoSetDescription' failed: "
+    "Not authorized to send Apple events to Photos. (-1743)"
+)
+NOT_RUNNING = (
+    "run_script 'photoExists' failed: Photos got an error: Application isn't running. (-600)"
+)
+TIMED_OUT = (
+    "run_script 'photoSetKeywords' failed: Photos got an error: AppleEvent timed out. (-1712)"
+)
+GONE = "Invalid photo id: 1F2E3D4C-0000-0000-0000-000000000000"
+
+
+@pytest.mark.parametrize(
+    ("message", "kind", "retryable", "needle"),
+    [
+        (NOT_AUTHORIZED, "permission", True, "Privacy & Security → Automation"),
+        ("execution error: (-1743)", "permission", True, "Automation"),
+        (NOT_RUNNING, "not-running", True, "Open Photos"),
+        (TIMED_OUT, "timeout", True, "busy"),
+        (GONE, "gone", False, "no longer in your Photos library"),
+    ],
+)
+def test_classify_bridge_error_known_cases(
+    message: str, kind: str, retryable: bool, needle: str
+) -> None:
+    advice = report.classify_bridge_error(message)
+    assert advice is not None
+    assert advice.kind == kind
+    assert advice.retryable is retryable
+    assert needle in advice.fix
+
+
+@pytest.mark.parametrize("message", ["bridge timeout", "", "something odd (-9999)"])
+def test_classify_bridge_error_unknown_returns_none(message: str) -> None:
+    assert report.classify_bridge_error(message) is None

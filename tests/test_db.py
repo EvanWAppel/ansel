@@ -108,8 +108,18 @@ def test_rows_returns_every_column_oldest_first(conn: sqlite3.Connection) -> Non
         ("uuid-1", "done", "A dog", "dog, park", None),
         ("uuid-2", "error", None, None, "bridge timeout"),
     ]
-    assert all(datetime.fromisoformat(row[5]) for row in rows)
+    assert all(row[5] and datetime.fromisoformat(row[5]) for row in rows)
 
 
 def test_rows_empty_db(conn: sqlite3.Connection) -> None:
     assert db.rows(conn) == []
+
+
+def test_error_rows_only_errors_oldest_first(conn: sqlite3.Connection) -> None:
+    db.record(conn, "a", "error", error="first")
+    db.record(conn, "b", "done")
+    db.record(conn, "c", "error", error="second")
+    assert [(uuid, error) for uuid, error, _ in db.error_rows(conn)] == [
+        ("a", "first"),
+        ("c", "second"),
+    ]

@@ -129,3 +129,11 @@ def rows(conn: sqlite3.Connection) -> list[tuple[str | None, ...]]:
     return conn.execute(
         f"SELECT {', '.join(COLUMNS)} FROM reviews ORDER BY reviewed_at, uuid"
     ).fetchall()
+
+
+def error_rows(conn: sqlite3.Connection) -> list[tuple[str, str | None, str]]:
+    """Return (uuid, error, reviewed_at) for every error-status record, oldest first."""
+    return conn.execute(
+        "SELECT uuid, error, reviewed_at FROM reviews WHERE status = 'error'"
+        " ORDER BY reviewed_at, uuid"
+    ).fetchall()

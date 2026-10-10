@@ -34,7 +34,8 @@ uv sync
 uv run ansel review                # review all unreviewed photos, oldest first
 uv run ansel chunk --month 2024-05 # review just one month — a natural finish line
 uv run ansel random [--count 20]   # a random batch from any period (see below)
-uv run ansel stats                 # progress totals + per-month breakdown
+uv run ansel stats [--json]        # progress totals + per-month breakdown
+uv run ansel export --csv [PATH]   # dump the progress DB as CSV (stdout if no PATH)
 uv run ansel redo <uuid>           # clear a photo's status to review it again
 ```
 

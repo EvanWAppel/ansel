@@ -56,6 +56,8 @@ ansel review                # everything unreviewed, oldest first
 ansel chunk --month 2024-05 # one month only — a natural finish line
 ansel random --count 20     # a random batch from any period
 ansel stats                 # progress totals + per-month breakdown
+ansel stats --json          # the same, as one JSON object (for charting/diffing)
+ansel export --csv [PATH]   # dump the progress DB as CSV (stdout if no PATH)
 ansel redo <uuid>           # clear one photo's status to review it again
 ```
 

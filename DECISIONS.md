@@ -60,3 +60,15 @@ the repo small (the project is generated, not stored) and makes CI able to verif
 the pure logic (`swift run ansel-core-check`) without an Xcode setup step. The
 trade-off is that `build.sh` reimplements a little of what Xcode does for free
 (bundle assembly, signing), which is acceptable for a personal/local app.
+
+## `stats --json`, with progress messages on stderr
+
+**Chose:** `--json` as the flag name, and sending the "Loading Photos library…"
+notice to stderr for every command. **Rejected:** the backlog's `--stats-json`
+name, and keeping the notice on stdout with a JSON-only special case.
+
+Repeating "stats" in the flag adds nothing, and `--json` is the usual convention.
+Machine-readable output is only useful if stdout holds nothing else. Sending
+progress messages to stderr everywhere is one simple rule, rather than
+branching per command. The cost is a small behavior change: anyone who captured
+`ansel review` stdout would no longer see the loading line in it.

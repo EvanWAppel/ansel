@@ -119,3 +119,13 @@ def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
     """Return counts of recorded statuses, e.g. {'done': 12, 'skipped': 3, 'error': 1}."""
     rows = conn.execute("SELECT status, COUNT(*) FROM reviews GROUP BY status").fetchall()
     return {status: count for status, count in rows}
+
+
+COLUMNS = ("uuid", "status", "caption", "keywords", "error", "reviewed_at")
+
+
+def rows(conn: sqlite3.Connection) -> list[tuple[str | None, ...]]:
+    """Return every review record as a tuple in COLUMNS order, oldest review first."""
+    return conn.execute(
+        f"SELECT {', '.join(COLUMNS)} FROM reviews ORDER BY reviewed_at, uuid"
+    ).fetchall()

@@ -116,8 +116,10 @@ AppleScript bridge calls occasionally fail. The photo is logged with status
 excluded from future sessions until you `ansel redo <uuid>` it.
 
 For the common causes, ansel explains how to fix it before showing the raw
-message: the Automation permission wasn't granted, Photos isn't running, Photos
-timed out, or the photo has since been deleted. `ansel errors` lists every
+message: the Automation permission wasn't granted, Photos isn't running, or
+Photos timed out. A "photo not found" failure is ambiguous (photoscript reports
+any failure to reach Photos that way), so the advice covers both a deleted photo
+and a missing permission. `ansel errors` lists every
 failed photo with that advice, and `stats` reminds you when there are any.
 
 ## Config

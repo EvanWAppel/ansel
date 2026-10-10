@@ -71,50 +71,59 @@ def write_csv(rows: Iterable[Sequence[str | None]], out: TextIO) -> None:
 
 @dataclass(frozen=True)
 class BridgeAdvice:
-    """What to do about a failed AppleScript-bridge call."""
+    """What to do about a failed AppleScript-bridge call (always followed by `ansel redo`)."""
 
     kind: str
     fix: str
-    retryable: bool  # whether `ansel redo` could succeed once the fix is applied
 
 
-# Matched against the stored error message. photoscript wraps py-applescript's
-# ScriptError, whose text ends in the AppleScript error number, e.g. "(-1743)";
-# the number is stable across macOS languages, so it is checked first.
+def _trailing_code(*codes: int) -> re.Pattern[str]:
+    """Match an AppleScript error number where py-applescript's ScriptError puts it.
+
+    ScriptError text is ``<message> (<number>)[ app='…'][ range=a-b]``. Anchoring on
+    that suffix keeps a number quoted back from an argument (e.g. a caption)
+    from deciding the classification.
+    """
+    alternatives = "|".join(str(code) for code in codes)
+    return re.compile(rf"\((?:{alternatives})\)(?: app='[^']*')?(?: range=\d+-\d+)?$")
+
+
+_PERMISSION_FIX = (
+    "Your terminal isn't allowed to control Photos. Turn it on in System Settings"
+    " → Privacy & Security → Automation (enable Photos under your terminal app)."
+)
+
+# Checked in order; the AppleScript error number is stable across macOS languages.
 _BRIDGE_RULES: tuple[tuple[re.Pattern[str], BridgeAdvice], ...] = (
+    (_trailing_code(-1743), BridgeAdvice("permission", _PERMISSION_FIX)),
     (
-        re.compile(r"\(-1743\)|not authorized to send apple events", re.IGNORECASE),
-        BridgeAdvice(
-            "permission",
-            "Your terminal isn't allowed to control Photos. Turn it on in System Settings"
-            " → Privacy & Security → Automation (enable Photos under your terminal app).",
-            retryable=True,
-        ),
-    ),
-    (
-        re.compile(r"\(-600\)|application isn't running", re.IGNORECASE),
+        # -600: Photos isn't running. -128: photoscript launched Photos itself and
+        # gave up waiting for it to respond.
+        _trailing_code(-600, -128),
         BridgeAdvice(
             "not-running",
-            "Photos wasn't running. Open Photos (with your library loaded) and retry.",
-            retryable=True,
+            "Photos wasn't running or didn't respond. Open Photos (with your library"
+            " loaded) and retry.",
         ),
     ),
     (
-        re.compile(r"\(-1712\)|timed out", re.IGNORECASE),
+        _trailing_code(-1712),
         BridgeAdvice(
             "timeout",
             "Photos took too long to respond — it may be busy (iCloud sync, an import)."
             " Retry once it settles.",
-            retryable=True,
         ),
     ),
     (
+        # photoscript's photoExists check returns false on *any* AppleScript failure,
+        # so this does not reliably mean the photo was deleted.
         re.compile(r"^Invalid photo id:"),
         BridgeAdvice(
-            "gone",
-            "This photo is no longer in your Photos library (deleted since ansel loaded"
-            " it). Nothing to retry — it drops out of the next session on its own.",
-            retryable=False,
+            "not-found",
+            "Photos couldn't find or reach this photo. It may have been deleted — or"
+            " your terminal lacks the Automation permission for Photos (System Settings"
+            " → Privacy & Security → Automation), or Photos was busy. Check both, then"
+            " retry.",
         ),
     ),
 )

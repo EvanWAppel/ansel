@@ -47,10 +47,13 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   stdout stays machine-readable.
 - ✅ Actionable bridge errors — `report.classify_bridge_error()` maps raw
   AppleScript failures (by error number: −1743 automation permission, −600
-  Photos not running, −1712 timeout; plus photoscript's "Invalid photo id" for
-  deleted photos) to a fix. The review loop leads with the fix, then the raw
+  Photos not running / −128 launch gave up, −1712 timeout — matched only as the
+  trailing ScriptError code; plus photoscript's "Invalid photo id", which is
+  ambiguous because its existence check swallows every AppleScript failure) to
+  a fix. The review loop leads with the fix, then the raw
   message; the DB still stores only the raw message (classified at display
   time, so old rows benefit and the mac app's schema is untouched). Lives in
   `report`, not `photos`, so it stays importable without osxphotos/AppKit.
 - ✅ `ansel errors` lists error-status photos with fix, raw message, and a
-  `redo` hint (omitted for deleted photos); `stats` points at it when any exist.
+  `redo` hint (always — it's also how to clear rows for deleted photos);
+  `stats` points at it when any exist.

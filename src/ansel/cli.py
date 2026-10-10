@@ -145,15 +145,17 @@ def errors() -> None:
     if not rows:
         click.echo("No errors 🎉")
         return
-    click.echo(f"{len(rows)} photo(s) with errors:")
+    click.echo(
+        f"{len(rows)} photo(s) with errors (some may be for photos you've since deleted;"
+        " `ansel redo` clears any row):"
+    )
     for uuid, message, reviewed_at in rows:
         advice = report.classify_bridge_error(message or "")
         click.echo(f"\n{uuid}  ({reviewed_at[:10]})")
         if advice is not None:
             click.echo(f"  fix:   {advice.fix}")
-        click.echo(f"  error: {message}")
-        if advice is None or advice.retryable:
-            click.echo(f"  retry: ansel redo {uuid}")
+        click.echo(f"  error: {message or '(no message)'}")
+        click.echo(f"  retry: ansel redo {uuid}")
 
 
 @main.command()

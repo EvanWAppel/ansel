@@ -72,3 +72,19 @@ Machine-readable output is only useful if stdout holds nothing else. Sending
 progress messages to stderr everywhere is one simple rule, rather than
 branching per command. The cost is a small behavior change: anyone who captured
 `ansel review` stdout would no longer see the loading line in it.
+
+## "Invalid photo id" is treated as ambiguous, not as "deleted"
+
+**Chose:** Classify photoscript's `Invalid photo id` as *not found*, with advice
+that covers both a deleted photo and an unreachable Photos (no Automation
+permission, Photos busy), and always offer `ansel redo`. **Rejected:** Treating
+it as "photo deleted, nothing to retry", and adding a separate existence check
+before each write to tell the two apart.
+
+photoscript's `photoExists` wraps the lookup in `try … on error return false`,
+so every AppleScript failure on the write path — most often a missing
+Automation permission on first run — surfaces as `Invalid photo id`. Calling it
+"deleted" would hide the one command that recovers the photo. A pre-write
+existence check would separate the cases, but it costs an extra bridge round-trip
+per photo and adds bridge code, all to make a rare message (a photo deleted
+mid-session) slightly more precise.

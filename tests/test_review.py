@@ -279,17 +279,20 @@ def test_write_failure_leads_with_the_fix(
     assert conn.execute("SELECT error FROM reviews").fetchone() == (raw,)
 
 
-def test_gone_photo_does_not_suggest_redo(
+def test_not_found_on_write_still_suggests_redo(
     conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    spy_photos.mark_error = ValueError("Invalid photo id: uuid-1")
-    scripted_prompts(["d"])
+    # The usual write-path failure: photoscript's existence check swallows the real
+    # error (often a missing Automation permission) and reports "Invalid photo id".
+    spy_photos.write_error = ValueError("Invalid photo id: uuid-1")
+    scripted_prompts(["caption one", ""])
 
     review.run_session([FakePhoto("uuid-1")], conn, config)
 
     out = capsys.readouterr().out
-    assert "no longer in your Photos library" in out
-    assert "ansel redo" not in out
+    assert "may have been deleted" in out
+    assert "Automation" in out
+    assert "ansel redo uuid-1" in out
 
 
 def test_unknown_failure_keeps_original_message(

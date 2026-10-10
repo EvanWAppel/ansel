@@ -123,4 +123,4 @@ def _report_bridge_failure(action: str, uuid: str, exc: Exception) -> None:
         return
     click.echo(f"  ! {action} failed — {advice.fix}")
     click.echo(f"    original error: {exc}")
-    click.echo(f"    logged as error; {redo}" if advice.retryable else "    logged as error")
+    click.echo(f"    logged as error; {redo}")

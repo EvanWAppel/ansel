@@ -121,19 +121,24 @@ def test_errors_lists_fix_raw_message_and_redo(db_path: Path, runner: CliRunner)
     )
     db.record(conn, "u-odd", "error", error="bridge hiccup")
     db.record(conn, "u-gone", "error", error="Invalid photo id: u-gone")
+    conn.execute("INSERT INTO reviews VALUES ('u-none', 'error', NULL, NULL, NULL, '2026-01-01')")
+    conn.commit()
     db.record(conn, "u-done", "done")
 
     result = runner.invoke(cli.main, ["errors"])
 
     assert result.exit_code == 0, result.output
     out = result.stdout
-    assert "3 photo(s) with errors" in out
+    assert "4 photo(s) with errors" in out
+    assert "may be for photos you've since deleted" in out
     assert "u-done" not in out
     assert "Privacy & Security → Automation" in out
     assert "bridge hiccup" in out
     assert "ansel redo u-perm" in out
     assert "ansel redo u-odd" in out
-    assert "ansel redo u-gone" not in out
+    assert "ansel redo u-gone" in out
+    assert "error: (no message)" in out
+    assert "None" not in out
 
 
 def test_errors_when_none(db_path: Path, runner: CliRunner) -> None:

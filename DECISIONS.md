@@ -104,3 +104,19 @@ several captions before it kicks in. The streak rule is still needed because,
 on the write path, a missing permission usually shows up as the ambiguous
 "Invalid photo id" rather than −1743. Skips don't reset the streak, because a
 skip never talks to Photos and so says nothing about whether it's reachable.
+
+## Multiple libraries: separate `--db`, no `--library` flag
+
+**Chose:** Configurable `--db`/`--config` (+ `ANSEL_DB`/`ANSEL_CONFIG`) only; to
+work on another library, open it in Photos and use its own `--db`.
+**Rejected:** A `--library` flag that points osxphotos reads at a given
+`.photoslibrary`.
+
+With no path, osxphotos reads the library Photos *last opened* — not a fixed
+system library — so switching libraries in Photos already moves reads, and
+AppleScript writes always go to the library Photos has open. A `--library` flag
+would add exactly one new state: reading one library while writing to another.
+photoscript can't target a library by path, so that mismatch can't be prevented,
+only warned about, and it isn't harmless — the first `d` creates a stray
+"Marked for Deletion" album in the wrong library, and every failed write is
+recorded as `error` until cleared with `ansel redo`.

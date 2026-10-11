@@ -26,8 +26,6 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
 - **Undo the last action** — an `ansel undo` that reverts the most recent
   `record`/write within a session (caption written to Photos can't be un-written
   via the bridge easily; scope this carefully).
-- **Configurable DB/config paths** via env vars or flags, so ansel can run
-  against more than one library.
 - **Keyword suggestions** — surface the most-used keywords at the prompt.
 
 ---
@@ -62,3 +60,7 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   skips don't reset the streak, a successful write/mark or answering yes does.
   No prompt after the last photo; a session with failures ends with a count
   and an `ansel errors` pointer instead of 🎉.
+- ✅ Configurable paths — `ansel --db/--config` group options with
+  `ANSEL_DB`/`ANSEL_CONFIG` env vars (flag wins, `~` expanded); defaults
+  unchanged. No `--library`: ansel follows the library Photos last opened, so
+  reads and writes always agree (see DECISIONS.md).

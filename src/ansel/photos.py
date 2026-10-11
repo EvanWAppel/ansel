@@ -22,7 +22,7 @@ VIDEO_SUFFIXES = {".mov", ".mp4", ".m4v", ".avi", ".mpg", ".mpeg", ".mkv", ".3gp
 
 
 def load_library() -> list[osxphotos.PhotoInfo]:
-    """Load all photos from the system Photos library (slow on large libraries)."""
+    """Load all photos from the library Photos last opened (slow on large libraries)."""
     return osxphotos.PhotosDB().photos()
 
 

@@ -46,8 +46,21 @@ uv sync
   your terminal control Photos. Approve it.
 
 Run commands with `uv run ansel …`, or `source .venv/bin/activate` once per
-shell and call `ansel …` directly. Either way, run from the project
-directory — `config.toml` and `photo_review.db` live here.
+shell and call `ansel …` directly. Either way, by default `config.toml` and
+`photo_review.db` are read from the current directory, so run from the project
+directory or point at them explicitly:
+
+```sh
+ansel --db ~/ansel/family.db --config ~/ansel/family.toml review
+```
+
+Each flag has an env var — `ANSEL_DB`, `ANSEL_CONFIG` — and a flag beats its
+env var; `~` is expanded, but the directory must already exist.
+
+ansel reads whichever library Photos last opened, and writes go to the library
+Photos has open, so the two always agree. To work through a second library,
+open it in Photos (hold Option while launching Photos to choose one) and give
+it its own `--db` so progress doesn't mix.
 
 ## Commands
 

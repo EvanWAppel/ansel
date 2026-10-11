@@ -162,3 +162,122 @@ def test_stats_json_has_no_errors_hint(
     db.record(db.connect(db_path), "a", "error", error="x")
     result = runner.invoke(cli.main, ["stats", "--json"])
     assert json.loads(result.stdout)["overall"]["error"] == 1
+
+
+# --- configurable paths: --db/--config flags, ANSEL_DB/ANSEL_CONFIG env vars ---
+
+
+@pytest.fixture
+def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("ANSEL_DB", "ANSEL_CONFIG"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def _csv_uuids(stdout: str) -> list[str]:
+    return [line.split(",")[0] for line in stdout.splitlines()[1:]]
+
+
+def test_db_flag_overrides_default(
+    db_path: Path, clean_env: None, runner: CliRunner, tmp_path: Path
+) -> None:
+    other = tmp_path / "other.db"
+    db.record(db.connect(other), "z", "done")
+    db.record(db.connect(db_path), "a", "done")
+    result = runner.invoke(cli.main, ["--db", str(other), "export", "--csv"])
+    assert result.exit_code == 0, result.output
+    assert _csv_uuids(result.stdout) == ["z"]
+
+
+def test_db_env_var_used_and_flag_wins(
+    db_path: Path, clean_env: None, runner: CliRunner, tmp_path: Path
+) -> None:
+    from_env, from_flag = tmp_path / "env.db", tmp_path / "flag.db"
+    db.record(db.connect(from_env), "env", "done")
+    db.record(db.connect(from_flag), "flag", "done")
+    env = {"ANSEL_DB": str(from_env)}
+
+    result = runner.invoke(cli.main, ["export", "--csv"], env=env)
+    assert _csv_uuids(result.stdout) == ["env"]
+
+    result = runner.invoke(cli.main, ["--db", str(from_flag), "export", "--csv"], env=env)
+    assert _csv_uuids(result.stdout) == ["flag"]
+
+
+def test_empty_db_env_var_falls_back_to_default(
+    db_path: Path, clean_env: None, runner: CliRunner
+) -> None:
+    db.record(db.connect(db_path), "a", "done")
+    result = runner.invoke(cli.main, ["export", "--csv"], env={"ANSEL_DB": ""})
+    assert result.exit_code == 0, result.output
+    assert _csv_uuids(result.stdout) == ["a"]
+
+
+def test_db_path_expands_tilde(
+    db_path: Path,
+    clean_env: None,
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    db.record(db.connect(tmp_path / "home.db"), "h", "done")
+    result = runner.invoke(cli.main, ["export", "--csv"], env={"ANSEL_DB": "~/home.db"})
+    assert result.exit_code == 0, result.output
+    assert _csv_uuids(result.stdout) == ["h"]
+
+
+def test_db_flag_reaches_errors_and_redo(
+    db_path: Path, clean_env: None, runner: CliRunner, tmp_path: Path
+) -> None:
+    other = tmp_path / "other.db"
+    db.record(db.connect(other), "z", "error", error="boom")
+
+    result = runner.invoke(cli.main, ["--db", str(other), "errors"])
+    assert result.exit_code == 0, result.output
+    assert "z" in result.stdout
+
+    result = runner.invoke(cli.main, ["--db", str(other), "redo", "z"])
+    assert result.exit_code == 0, result.output
+    assert db.rows(db.connect(other)) == []
+
+
+def test_db_flag_reaches_stats(
+    db_path: Path,
+    library: list[SimpleNamespace],
+    clean_env: None,
+    runner: CliRunner,
+    tmp_path: Path,
+) -> None:
+    other = tmp_path / "other.db"
+    db.record(db.connect(other), "a", "done")
+    result = runner.invoke(cli.main, ["--db", str(other), "stats", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["overall"]["done"] == 1
+
+
+@pytest.mark.parametrize(
+    "args", [["review"], ["chunk", "--month", "2024-05"], ["random"]], ids=lambda a: a[0]
+)
+def test_config_flag_and_env_choose_config_file(
+    args: list[str],
+    db_path: Path,
+    library: list[SimpleNamespace],
+    clean_env: None,
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)  # so a stray default ./config.toml would be visible
+    for uuid in ("a", "b"):
+        db.record(db.connect(db_path), uuid, "done")  # nothing pending: no session starts
+
+    flag_cfg = tmp_path / "flag.toml"
+    result = runner.invoke(cli.main, ["--config", str(flag_cfg), *args])
+    assert result.exit_code == 0, result.output
+    assert flag_cfg.exists()
+
+    env_cfg = tmp_path / "env.toml"
+    result = runner.invoke(cli.main, args, env={"ANSEL_CONFIG": str(env_cfg)})
+    assert result.exit_code == 0, result.output
+    assert env_cfg.exists()
+    assert not (tmp_path / "config.toml").exists()

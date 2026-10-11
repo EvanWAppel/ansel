@@ -58,6 +58,7 @@ ansel random --count 20     # a random batch from any period
 ansel stats                 # progress totals + per-month breakdown
 ansel stats --json          # the same, as one JSON object (for charting/diffing)
 ansel export --csv [PATH]   # dump the progress DB as CSV (stdout if no PATH)
+ansel errors                # photos whose Photos write failed, with how to fix each
 ansel redo <uuid>           # clear one photo's status to review it again
 ```
 
@@ -113,6 +114,13 @@ Deleted as usual.
 AppleScript bridge calls occasionally fail. The photo is logged with status
 `error` (message included) instead of crashing your session, and it's
 excluded from future sessions until you `ansel redo <uuid>` it.
+
+For the common causes, ansel explains how to fix it before showing the raw
+message: the Automation permission wasn't granted, Photos isn't running, or
+Photos timed out. A "photo not found" failure is ambiguous (photoscript reports
+any failure to reach Photos that way), so the advice covers both a deleted photo
+and a missing permission. `ansel errors` lists every
+failed photo with that advice, and `stats` reminds you when there are any.
 
 ## Config
 

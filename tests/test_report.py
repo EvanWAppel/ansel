@@ -5,6 +5,8 @@ import io
 from datetime import datetime
 from types import SimpleNamespace
 
+import pytest
+
 from ansel import db, report
 
 
@@ -90,3 +92,68 @@ def test_write_csv_empty_still_writes_header() -> None:
     out = io.StringIO()
     report.write_csv([], out)
     assert out.getvalue() == "uuid,status,caption,keywords,error,reviewed_at\n"
+
+
+# Representative bridge failures: photoscript wraps py-applescript's ScriptError
+# (message + " (<errno>)") as AppleScriptError("run_script '<name>' failed: ..."),
+# and raises ValueError("Invalid photo id: ...") when its `photoExists` check
+# returns false -- which it also does on *any* AppleScript failure (the lookup sits
+# in a bare `try ... on error return false`), so that case is ambiguous.
+NOT_AUTHORIZED = (
+    "run_script 'photoSetDescription' failed: "
+    "Not authorized to send Apple events to Photos. (-1743)"
+)
+NOT_RUNNING = (
+    "run_script 'photoExists' failed: Photos got an error: Application isn't running. (-600)"
+)
+TIMED_OUT = (
+    "run_script 'photoSetKeywords' failed: Photos got an error: AppleEvent timed out. (-1712)"
+)
+NOT_FOUND = "Invalid photo id: 1F2E3D4C-0000-0000-0000-000000000000"
+# Real ScriptError text carries trailing app/range details after the number.
+NOT_AUTHORIZED_WITH_APP = (
+    "run_script 'photosLibraryVersion' failed:"
+    " Not authorized to send Apple events to Photos. (-1743) app='Photos'"
+)
+LAUNCH_GAVE_UP = "run_script 'photoExists' failed: User canceled. (-128)"
+
+
+@pytest.mark.parametrize(
+    ("message", "kind", "needle"),
+    [
+        (NOT_AUTHORIZED, "permission", "Privacy & Security → Automation"),
+        (NOT_AUTHORIZED_WITH_APP, "permission", "Automation"),
+        ("execution error: (-1743)", "permission", "Automation"),
+        (NOT_RUNNING, "not-running", "Open Photos"),
+        (LAUNCH_GAVE_UP, "not-running", "Open Photos"),
+        (TIMED_OUT, "timeout", "busy"),
+        (NOT_FOUND, "not-found", "may have been deleted"),
+    ],
+)
+def test_classify_bridge_error_known_cases(message: str, kind: str, needle: str) -> None:
+    advice = report.classify_bridge_error(message)
+    assert advice is not None
+    assert advice.kind == kind
+    assert needle in advice.fix
+
+
+def test_not_found_advice_also_points_at_permission_and_photos() -> None:
+    # photoExists swallows every failure, so "not found" must not claim deletion.
+    advice = report.classify_bridge_error(NOT_FOUND)
+    assert advice is not None
+    assert "Automation" in advice.fix
+    assert "Photos" in advice.fix
+
+
+def test_classify_ignores_codes_quoted_from_arguments() -> None:
+    # A caption echoed back inside the error must not decide the classification.
+    message = (
+        "run_script 'photoSetDescription' failed:"
+        ' Can\'t make "lunch (-600) timed out" into type text. (-1700)'
+    )
+    assert report.classify_bridge_error(message) is None
+
+
+@pytest.mark.parametrize("message", ["bridge timeout", "", "something odd (-9999)"])
+def test_classify_bridge_error_unknown_returns_none(message: str) -> None:
+    assert report.classify_bridge_error(message) is None

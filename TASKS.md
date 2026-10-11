@@ -8,24 +8,7 @@ Development is TDD: write a failing test, make it pass, refactor. Pure-logic
 tests never touch the Photos library; the AppleScript bridge and preview
 machinery are mocked (see `tests/test_review.py` for the pattern).
 
-## P1 — error ergonomics
-
-- **Better AppleScript error messages.** Bridge failures currently surface the
-  raw exception string (`write_metadata` / `mark_for_deletion` → status
-  `error`). Map the common cases to actionable guidance:
-  - automation permission not granted → point at System Settings → Privacy &
-    Security → Automation.
-  - Photos not running / library not open → tell the user to open Photos.
-  - photo no longer exists (deleted since load) → suggest `redo` is not needed;
-    it will drop out on next load.
-  Keep the raw message too (for `redo` diagnosis), but lead with the fix. Add a
-  `photos.classify_bridge_error(exc) -> str` pure function and test it against
-  representative message strings.
-- **Surface `error`-status photos in `stats`** with their messages, or add
-  `ansel errors` to list them, so failures aren't invisible until the next
-  session.
-
-## P2 — scale
+## P1 — scale
 
 - **10k+ library profiling.** `_load_photos` loads the whole library and sorts
   in memory on every command (`review`, `chunk`, `stats`, `random`). Profile
@@ -38,7 +21,7 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   - a progress indicator during the initial load (currently a single "this can
     take a moment" line).
 
-## P3 — nice-to-haves
+## P2 — nice-to-haves
 
 - **Undo the last action** — an `ansel undo` that reverts the most recent
   `record`/write within a session (caption written to Photos can't be un-written
@@ -62,3 +45,15 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
   aggregation moved into a pure `report.build_stats()` shared by the text and
   JSON renderers. The "Loading Photos library…" line now goes to stderr so
   stdout stays machine-readable.
+- ✅ Actionable bridge errors — `report.classify_bridge_error()` maps raw
+  AppleScript failures (by error number: −1743 automation permission, −600
+  Photos not running / −128 launch gave up, −1712 timeout — matched only as the
+  trailing ScriptError code; plus photoscript's "Invalid photo id", which is
+  ambiguous because its existence check swallows every AppleScript failure) to
+  a fix. The review loop leads with the fix, then the raw
+  message; the DB still stores only the raw message (classified at display
+  time, so old rows benefit and the mac app's schema is untouched). Lives in
+  `report`, not `photos`, so it stays importable without osxphotos/AppKit.
+- ✅ `ansel errors` lists error-status photos with fix, raw message, and a
+  `redo` hint (always — it's also how to clear rows for deleted photos);
+  `stats` points at it when any exist.

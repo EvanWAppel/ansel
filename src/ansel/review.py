@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import click
 
-from ansel import db
+from ansel import db, report
 from ansel.config import Config, expand_keywords
 from ansel.photos import (
     DELETION_ALBUM,
@@ -75,10 +75,7 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                     mark_for_deletion(photo.uuid)
                 except Exception as exc:  # AppleScript bridge calls can fail in many ways
                     db.record(conn, photo.uuid, "error", error=str(exc))
-                    click.echo(
-                        f"  ! marking failed ({exc}) — logged as error;"
-                        f" run 'ansel redo {photo.uuid}' to retry later"
-                    )
+                    _report_bridge_failure("marking", photo.uuid, exc)
                     continue
                 db.record(conn, photo.uuid, "delete")
                 click.echo(f"  ✗ added to “{DELETION_ALBUM}” album — batch-delete it in Photos")
@@ -101,10 +98,7 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                 db.record(
                     conn, photo.uuid, "error", caption=caption, keywords=keywords, error=str(exc)
                 )
-                click.echo(
-                    f"  ! write failed ({exc}) — logged as error;"
-                    f" run 'ansel redo {photo.uuid}' to retry later"
-                )
+                _report_bridge_failure("write", photo.uuid, exc)
                 continue
 
             db.record(conn, photo.uuid, "done", caption=caption, keywords=keywords)
@@ -118,3 +112,15 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
     finally:
         if viewer is not None:
             viewer.close()
+
+
+def _report_bridge_failure(action: str, uuid: str, exc: Exception) -> None:
+    """Tell the user a bridge call failed, leading with the fix when it's recognised."""
+    redo = f"run 'ansel redo {uuid}' to retry later"
+    advice = report.classify_bridge_error(str(exc))
+    if advice is None:
+        click.echo(f"  ! {action} failed ({exc}) — logged as error; {redo}")
+        return
+    click.echo(f"  ! {action} failed — {advice.fix}")
+    click.echo(f"    original error: {exc}")
+    click.echo(f"    logged as error; {redo}")

@@ -255,3 +255,54 @@ def test_missing_original_skips_preview(conn, config, spy_photos, scripted_promp
     # No preview opened when there's no viewable path, but review still proceeds.
     assert spy_photos.calls["opened"] == []
     assert db.all_statuses(conn) == {"uuid-1": "skipped"}
+
+
+def test_write_failure_leads_with_the_fix(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raw = (
+        "run_script 'photoSetDescription' failed:"
+        " Not authorized to send Apple events to Photos. (-1743)"
+    )
+    spy_photos.write_error = RuntimeError(raw)
+    scripted_prompts(["caption one", ""])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "Privacy & Security → Automation" in out
+    assert raw in out
+    assert out.index("Automation") < out.index(raw)
+    assert "ansel redo uuid-1" in out
+    # The DB keeps the raw message untouched, for `redo` diagnosis and the mac app.
+    assert db.all_statuses(conn) == {"uuid-1": "error"}
+    assert conn.execute("SELECT error FROM reviews").fetchone() == (raw,)
+
+
+def test_not_found_on_write_still_suggests_redo(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The usual write-path failure: photoscript's existence check swallows the real
+    # error (often a missing Automation permission) and reports "Invalid photo id".
+    spy_photos.write_error = ValueError("Invalid photo id: uuid-1")
+    scripted_prompts(["caption one", ""])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "may have been deleted" in out
+    assert "Automation" in out
+    assert "ansel redo uuid-1" in out
+
+
+def test_unknown_failure_keeps_original_message(
+    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spy_photos.write_error = RuntimeError("bridge timeout")
+    scripted_prompts(["caption one", ""])
+
+    review.run_session([FakePhoto("uuid-1")], conn, config)
+
+    out = capsys.readouterr().out
+    assert "write failed (bridge timeout)" in out
+    assert "ansel redo uuid-1" in out

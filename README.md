@@ -125,7 +125,7 @@ failed photo with that advice, and `stats` reminds you when there are any.
 If a failure looks like it will hit every photo (missing permission, Photos not
 running), or two writes fail in a row, ansel asks whether to keep going, so you
 don't type captions that can't be saved. Answer `n` to stop with your progress
-saved.
+saved. A session with any failures ends by counting them instead of 🎉.
 
 ## Config
 

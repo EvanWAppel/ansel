@@ -127,14 +127,18 @@ def scripted_confirms(monkeypatch: pytest.MonkeyPatch):
     An unexpected confirm (empty queue) fails the test instead of reading stdin.
     """
 
-    def install(answers: list[bool]) -> list[str]:
+    def install(answers: list[bool | BaseException]) -> list[str]:
         queue = list(answers)
         asked: list[str] = []
 
-        def fake_confirm(text: str, *_args: object, **_kwargs: object) -> bool:
+        def fake_confirm(text: str, *_args: object, default: bool = False, **_kw: object) -> bool:
             asked.append(text)
+            assert default is False, "keep-going must default to stopping"
             assert queue, f"unexpected confirm: {text!r}"
-            return queue.pop(0)
+            answer = queue.pop(0)
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
 
         monkeypatch.setattr(click, "confirm", fake_confirm)
         return asked
@@ -293,7 +297,7 @@ def test_write_failure_leads_with_the_fix(
     )
     spy_photos.write_error = RuntimeError(raw)
     scripted_prompts(["caption one", ""])
-    scripted_confirms([False])
+    scripted_confirms([])
 
     review.run_session([FakePhoto("uuid-1")], conn, config)
 
@@ -349,9 +353,14 @@ def test_permission_failure_asks_and_stops_on_no(
 
     review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
 
-    assert len(asked) == 1
+    assert asked == ["  Photos isn't accepting changes — keep going?"]
     assert db.all_statuses(conn) == {"uuid-1": "error"}
-    assert "Stopping — progress saved." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Stopping — progress saved." in out
+    assert "`ansel errors` to see what to redo" in out
+    assert "All photos in this session reviewed" not in out
+    # The preview of the photo that failed is closed on the way out.
+    assert [preview.closed for _, preview in spy_photos.calls["opened"]] == [True]
 
 
 def test_not_running_failure_asks_and_continues_on_yes(
@@ -401,7 +410,7 @@ def test_skip_between_failures_does_not_reset_the_streak(
     scripted_prompts(["one", "", "", "two", ""])
     asked = scripted_confirms([False])
 
-    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    photos = [FakePhoto(f"uuid-{n}") for n in range(1, 5)]
     review.run_session(photos, conn, config)
 
     assert len(asked) == 1
@@ -440,3 +449,47 @@ def test_answering_yes_resets_the_streak(
 
     assert len(asked) == 1
     assert len(db.all_statuses(conn)) == 3
+
+
+def test_no_keep_going_prompt_after_the_last_photo(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, capsys
+) -> None:
+    spy_photos.write_error = RuntimeError(PERMISSION_ERROR)
+    scripted_prompts(["one", "", "two", ""])
+    asked = scripted_confirms([True])  # asked after photo 1 only
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "error"}
+    out = capsys.readouterr().out
+    assert "All photos in this session reviewed" not in out
+    assert "Session finished — 2 photo(s) failed to save" in out
+
+
+def test_streak_spans_mark_and_write_failures(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.mark_error = RuntimeError("bridge hiccup")
+    spy_photos.write_error = RuntimeError("bridge hiccup")
+    scripted_prompts(["d", "two", ""])
+    asked = scripted_confirms([False])
+
+    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    review.run_session(photos, conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "error"}
+
+
+def test_ctrl_c_at_keep_going_prompt_exits_cleanly(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, capsys
+) -> None:
+    spy_photos.write_error = RuntimeError(PERMISSION_ERROR)
+    scripted_prompts(["one", ""])
+    scripted_confirms([click.exceptions.Abort()])
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert db.all_statuses(conn) == {"uuid-1": "error"}
+    assert "Interrupted — progress saved." in capsys.readouterr().out

@@ -51,12 +51,13 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
     keywords (shortcuts and freeform mixed), then write via photoscript.
     AppleScript failures are logged with status 'error' instead of crashing
     the session; after one that looks systemic (or several in a row) the user
-    is asked whether to keep going. Ctrl-C exits cleanly; everything already
-    answered is committed.
+    is asked whether to keep going, unless it was the last photo anyway.
+    Ctrl-C exits cleanly; everything already answered is committed.
     """
     total = len(photos)
     viewer: Preview | None = None
     streak = 0  # consecutive bridge failures
+    failures = 0
     try:
         for i, photo in enumerate(photos, start=1):
             click.echo(f"\n[{i}/{total}] {describe(photo)}")
@@ -85,8 +86,9 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                 except Exception as exc:  # AppleScript bridge calls can fail in many ways
                     db.record(conn, photo.uuid, "error", error=str(exc))
                     streak += 1
+                    failures += 1
                     advice = _report_bridge_failure("marking", photo.uuid, exc)
-                    if should_ask_to_stop(advice, streak):
+                    if i < total and should_ask_to_stop(advice, streak):
                         if not _keep_going():
                             return
                         streak = 0
@@ -114,8 +116,9 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                     conn, photo.uuid, "error", caption=caption, keywords=keywords, error=str(exc)
                 )
                 streak += 1
+                failures += 1
                 advice = _report_bridge_failure("write", photo.uuid, exc)
-                if should_ask_to_stop(advice, streak):
+                if i < total and should_ask_to_stop(advice, streak):
                     if not _keep_going():
                         return
                     streak = 0
@@ -127,7 +130,13 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                 click.echo(f"  ✓ saved ({', '.join(keywords)})")
             else:
                 click.echo("  ✓ saved")
-        click.echo("\nAll photos in this session reviewed 🎉")
+        if failures:
+            click.echo(
+                f"\nSession finished — {failures} photo(s) failed to save;"
+                " run `ansel errors` to see what to redo."
+            )
+        else:
+            click.echo("\nAll photos in this session reviewed 🎉")
     except (KeyboardInterrupt, click.exceptions.Abort):
         click.echo("\nInterrupted — progress saved.")
     finally:
@@ -143,9 +152,12 @@ def should_ask_to_stop(advice: report.BridgeAdvice | None, streak: int) -> bool:
 
 def _keep_going() -> bool:
     """Ask whether to continue after repeated/systemic failures; say so if stopping."""
-    if click.confirm("  Writes to Photos are failing — keep going?", default=False):
+    if click.confirm("  Photos isn't accepting changes — keep going?", default=False):
         return True
-    click.echo("Stopping — progress saved. Fix the cause above, then `ansel errors`.")
+    click.echo(
+        "Stopping — progress saved. Fix the cause above, then run `ansel errors`"
+        " to see what to redo."
+    )
     return False
 
 

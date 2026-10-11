@@ -60,3 +60,5 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
 - ✅ The review loop asks "keep going?" (default no) after a systemic bridge
   failure (permission / Photos not running) or 2 failures in a row of any kind;
   skips don't reset the streak, a successful write/mark or answering yes does.
+  No prompt after the last photo; a session with failures ends with a count
+  and an `ansel errors` pointer instead of 🎉.

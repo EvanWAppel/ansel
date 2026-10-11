@@ -88,3 +88,19 @@ Automation permission on first run — surfaces as `Invalid photo id`. Calling i
 existence check would separate the cases, but it costs an extra bridge round-trip
 per photo and adds bridge code, all to make a rare message (a photo deleted
 mid-session) slightly more precise.
+
+## Ask to stop after a systemic failure or two failures in a row
+
+**Chose:** After a bridge failure that is clearly systemic (Automation permission,
+Photos not running), or after 2 bridge failures in a row of any kind, ask "keep
+going?", defaulting to no. **Rejected:** Stopping the session outright, and a
+single "N failures in a row" rule that ignores the error type.
+
+A missing permission makes every later write fail, so carrying on just wastes
+captions the user types. Stopping outright, though, takes away the option to push
+on deliberately (say, while fixing Photos in another window). An "N in a row"
+rule on its own would be simpler, but it lets a known-systemic error cost
+several captions before it kicks in. The streak rule is still needed because,
+on the write path, a missing permission usually shows up as the ambiguous
+"Invalid photo id" rather than −1743. Skips don't reset the streak, because a
+skip never talks to Photos and so says nothing about whether it's reachable.

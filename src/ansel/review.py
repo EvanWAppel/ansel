@@ -18,6 +18,13 @@ from ansel.photos import (
     write_metadata,
 )
 
+# Failures that will hit every remaining photo until the user fixes something.
+SYSTEMIC_KINDS = frozenset({"permission", "not-running"})
+# Bridge failures in a row (skips don't count either way) before asking to stop;
+# catches a systemic cause that surfaced ambiguously (e.g. "Invalid photo id").
+FAILURE_STREAK_LIMIT = 2
+
+
 if TYPE_CHECKING:
     import osxphotos
 
@@ -43,11 +50,14 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
     for a caption (blank skips, 'd' marks for deletion, 'q' quits cleanly) and
     keywords (shortcuts and freeform mixed), then write via photoscript.
     AppleScript failures are logged with status 'error' instead of crashing
-    the session. Ctrl-C exits cleanly; everything already answered is
-    committed.
+    the session; after one that looks systemic (or several in a row) the user
+    is asked whether to keep going, unless it was the last photo anyway.
+    Ctrl-C exits cleanly; everything already answered is committed.
     """
     total = len(photos)
     viewer: Preview | None = None
+    streak = 0  # consecutive bridge failures
+    failures = 0
     try:
         for i, photo in enumerate(photos, start=1):
             click.echo(f"\n[{i}/{total}] {describe(photo)}")
@@ -75,8 +85,15 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                     mark_for_deletion(photo.uuid)
                 except Exception as exc:  # AppleScript bridge calls can fail in many ways
                     db.record(conn, photo.uuid, "error", error=str(exc))
-                    _report_bridge_failure("marking", photo.uuid, exc)
+                    streak += 1
+                    failures += 1
+                    advice = _report_bridge_failure("marking", photo.uuid, exc)
+                    if i < total and should_ask_to_stop(advice, streak):
+                        if not _keep_going():
+                            return
+                        streak = 0
                     continue
+                streak = 0
                 db.record(conn, photo.uuid, "delete")
                 click.echo(f"  ✗ added to “{DELETION_ALBUM}” album — batch-delete it in Photos")
                 continue
@@ -98,15 +115,28 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
                 db.record(
                     conn, photo.uuid, "error", caption=caption, keywords=keywords, error=str(exc)
                 )
-                _report_bridge_failure("write", photo.uuid, exc)
+                streak += 1
+                failures += 1
+                advice = _report_bridge_failure("write", photo.uuid, exc)
+                if i < total and should_ask_to_stop(advice, streak):
+                    if not _keep_going():
+                        return
+                    streak = 0
                 continue
 
+            streak = 0
             db.record(conn, photo.uuid, "done", caption=caption, keywords=keywords)
             if keywords:
                 click.echo(f"  ✓ saved ({', '.join(keywords)})")
             else:
                 click.echo("  ✓ saved")
-        click.echo("\nAll photos in this session reviewed 🎉")
+        if failures:
+            click.echo(
+                f"\nSession finished — {failures} photo(s) failed to save;"
+                " run `ansel errors` to see what to redo."
+            )
+        else:
+            click.echo("\nAll photos in this session reviewed 🎉")
     except (KeyboardInterrupt, click.exceptions.Abort):
         click.echo("\nInterrupted — progress saved.")
     finally:
@@ -114,13 +144,31 @@ def run_session(photos: list[osxphotos.PhotoInfo], conn: Connection, config: Con
             viewer.close()
 
 
-def _report_bridge_failure(action: str, uuid: str, exc: Exception) -> None:
+def should_ask_to_stop(advice: report.BridgeAdvice | None, streak: int) -> bool:
+    """Whether a bridge failure suggests the rest of the session will fail too."""
+    systemic = advice is not None and advice.kind in SYSTEMIC_KINDS
+    return systemic or streak >= FAILURE_STREAK_LIMIT
+
+
+def _keep_going() -> bool:
+    """Ask whether to continue after repeated/systemic failures; say so if stopping."""
+    if click.confirm("  Photos isn't accepting changes — keep going?", default=False):
+        return True
+    click.echo(
+        "Stopping — progress saved. Fix the cause above, then run `ansel errors`"
+        " to see what to redo."
+    )
+    return False
+
+
+def _report_bridge_failure(action: str, uuid: str, exc: Exception) -> report.BridgeAdvice | None:
     """Tell the user a bridge call failed, leading with the fix when it's recognised."""
     redo = f"run 'ansel redo {uuid}' to retry later"
     advice = report.classify_bridge_error(str(exc))
     if advice is None:
         click.echo(f"  ! {action} failed ({exc}) — logged as error; {redo}")
-        return
+        return None
     click.echo(f"  ! {action} failed — {advice.fix}")
     click.echo(f"    original error: {exc}")
     click.echo(f"    logged as error; {redo}")
+    return advice

@@ -57,3 +57,8 @@ machinery are mocked (see `tests/test_review.py` for the pattern).
 - ✅ `ansel errors` lists error-status photos with fix, raw message, and a
   `redo` hint (always — it's also how to clear rows for deleted photos);
   `stats` points at it when any exist.
+- ✅ The review loop asks "keep going?" (default no) after a systemic bridge
+  failure (permission / Photos not running) or 2 failures in a row of any kind;
+  skips don't reset the streak, a successful write/mark or answering yes does.
+  No prompt after the last photo; a session with failures ends with a count
+  and an `ansel errors` pointer instead of 🎉.

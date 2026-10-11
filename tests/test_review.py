@@ -120,6 +120,32 @@ def spy_photos(monkeypatch: pytest.MonkeyPatch):
     return spy
 
 
+@pytest.fixture
+def scripted_confirms(monkeypatch: pytest.MonkeyPatch):
+    """Install a queue of answers for ``click.confirm``; returns the questions asked.
+
+    An unexpected confirm (empty queue) fails the test instead of reading stdin.
+    """
+
+    def install(answers: list[bool | BaseException]) -> list[str]:
+        queue = list(answers)
+        asked: list[str] = []
+
+        def fake_confirm(text: str, *_args: object, default: bool = False, **_kw: object) -> bool:
+            asked.append(text)
+            assert default is False, "keep-going must default to stopping"
+            assert queue, f"unexpected confirm: {text!r}"
+            answer = queue.pop(0)
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+
+        monkeypatch.setattr(click, "confirm", fake_confirm)
+        return asked
+
+    return install
+
+
 def test_caption_and_keywords_saved(conn, config, spy_photos, scripted_prompts) -> None:
     scripted_prompts(["A dog at the park", "g, park"])
     photos = [FakePhoto("uuid-1")]
@@ -258,7 +284,12 @@ def test_missing_original_skips_preview(conn, config, spy_photos, scripted_promp
 
 
 def test_write_failure_leads_with_the_fix(
-    conn, config, spy_photos, scripted_prompts, capsys: pytest.CaptureFixture[str]
+    conn,
+    config,
+    spy_photos,
+    scripted_prompts,
+    scripted_confirms,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     raw = (
         "run_script 'photoSetDescription' failed:"
@@ -266,6 +297,7 @@ def test_write_failure_leads_with_the_fix(
     )
     spy_photos.write_error = RuntimeError(raw)
     scripted_prompts(["caption one", ""])
+    scripted_confirms([])
 
     review.run_session([FakePhoto("uuid-1")], conn, config)
 
@@ -306,3 +338,158 @@ def test_unknown_failure_keeps_original_message(
     out = capsys.readouterr().out
     assert "write failed (bridge timeout)" in out
     assert "ansel redo uuid-1" in out
+
+
+PERMISSION_ERROR = "Not authorized to send Apple events to Photos. (-1743)"
+NOT_RUNNING_ERROR = "Photos got an error: Application isn't running. (-600)"
+
+
+def test_permission_failure_asks_and_stops_on_no(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, capsys
+) -> None:
+    spy_photos.write_error = RuntimeError(PERMISSION_ERROR)
+    scripted_prompts(["caption one", ""])  # photo 2 is never prompted
+    asked = scripted_confirms([False])
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert asked == ["  Photos isn't accepting changes — keep going?"]
+    assert db.all_statuses(conn) == {"uuid-1": "error"}
+    out = capsys.readouterr().out
+    assert "Stopping — progress saved." in out
+    assert "`ansel errors` to see what to redo" in out
+    assert "All photos in this session reviewed" not in out
+    # The preview of the photo that failed is closed on the way out.
+    assert [preview.closed for _, preview in spy_photos.calls["opened"]] == [True]
+
+
+def test_not_running_failure_asks_and_continues_on_yes(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.mark_error = RuntimeError(NOT_RUNNING_ERROR)
+    scripted_prompts(["d", ""])
+    asked = scripted_confirms([True])
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "skipped"}
+
+
+def test_single_unrecognised_failure_does_not_ask(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.write_error = RuntimeError("bridge hiccup")
+    scripted_prompts(["caption one", "", ""])
+    asked = scripted_confirms([])
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert asked == []
+
+
+def test_two_failures_in_a_row_ask_even_when_ambiguous(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    # On the write path a missing permission surfaces as "Invalid photo id".
+    spy_photos.write_error = ValueError("Invalid photo id: x")
+    scripted_prompts(["one", "", "two", ""])
+    asked = scripted_confirms([False])
+
+    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    review.run_session(photos, conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "error"}
+
+
+def test_skip_between_failures_does_not_reset_the_streak(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.write_error = RuntimeError("bridge hiccup")
+    scripted_prompts(["one", "", "", "two", ""])
+    asked = scripted_confirms([False])
+
+    photos = [FakePhoto(f"uuid-{n}") for n in range(1, 5)]
+    review.run_session(photos, conn, config)
+
+    assert len(asked) == 1
+
+
+def test_success_resets_the_streak(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, monkeypatch
+) -> None:
+    outcomes = [RuntimeError("bridge hiccup"), None, RuntimeError("bridge hiccup")]
+
+    def flaky_write(uuid: str, caption: str | None, keywords: list[str]) -> None:
+        error = outcomes.pop(0)
+        if error is not None:
+            raise error
+
+    monkeypatch.setattr(review, "write_metadata", flaky_write)
+    scripted_prompts(["one", "", "two", "", "three", ""])
+    asked = scripted_confirms([])
+
+    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    review.run_session(photos, conn, config)
+
+    assert asked == []
+    assert db.all_statuses(conn)["uuid-2"] == "done"
+
+
+def test_answering_yes_resets_the_streak(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.write_error = RuntimeError("bridge hiccup")
+    scripted_prompts(["one", "", "two", "", "three", ""])
+    asked = scripted_confirms([True])  # asked after #2 only; #3 starts a new streak
+
+    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    review.run_session(photos, conn, config)
+
+    assert len(asked) == 1
+    assert len(db.all_statuses(conn)) == 3
+
+
+def test_no_keep_going_prompt_after_the_last_photo(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, capsys
+) -> None:
+    spy_photos.write_error = RuntimeError(PERMISSION_ERROR)
+    scripted_prompts(["one", "", "two", ""])
+    asked = scripted_confirms([True])  # asked after photo 1 only
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "error"}
+    out = capsys.readouterr().out
+    assert "All photos in this session reviewed" not in out
+    assert "Session finished — 2 photo(s) failed to save" in out
+
+
+def test_streak_spans_mark_and_write_failures(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms
+) -> None:
+    spy_photos.mark_error = RuntimeError("bridge hiccup")
+    spy_photos.write_error = RuntimeError("bridge hiccup")
+    scripted_prompts(["d", "two", ""])
+    asked = scripted_confirms([False])
+
+    photos = [FakePhoto("uuid-1"), FakePhoto("uuid-2"), FakePhoto("uuid-3")]
+    review.run_session(photos, conn, config)
+
+    assert len(asked) == 1
+    assert db.all_statuses(conn) == {"uuid-1": "error", "uuid-2": "error"}
+
+
+def test_ctrl_c_at_keep_going_prompt_exits_cleanly(
+    conn, config, spy_photos, scripted_prompts, scripted_confirms, capsys
+) -> None:
+    spy_photos.write_error = RuntimeError(PERMISSION_ERROR)
+    scripted_prompts(["one", ""])
+    scripted_confirms([click.exceptions.Abort()])
+
+    review.run_session([FakePhoto("uuid-1"), FakePhoto("uuid-2")], conn, config)
+
+    assert db.all_statuses(conn) == {"uuid-1": "error"}
+    assert "Interrupted — progress saved." in capsys.readouterr().out

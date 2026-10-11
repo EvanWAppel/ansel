@@ -122,6 +122,11 @@ any failure to reach Photos that way), so the advice covers both a deleted photo
 and a missing permission. `ansel errors` lists every
 failed photo with that advice, and `stats` reminds you when there are any.
 
+If a failure looks like it will hit every photo (missing permission, Photos not
+running), or two writes fail in a row, ansel asks whether to keep going, so you
+don't type captions that can't be saved. Answer `n` to stop with your progress
+saved.
+
 ## Config
 
 `config.toml` is created with example shortcuts on first run; edit freely.

@@ -1,0 +1,40 @@
+# Drafted on 2026-10-28 by _system 4b (not yet verified in ansel's own session).
+# Format: ~/Documents/_system/docs/project-toml.md
+
+[project]
+name = "ansel"
+group = "portfolio"
+kind = "tool"               # Python CLI + native SwiftUI macOS app, both local (README.md)
+status = "active"           # last commit 2026-10-11; P1/P2 tasks still open in TASKS.md
+repo = "EvanWAppel/ansel"
+visibility = "public"       # gh repo view
+on_site = true              # enki data/projects.ts:310 (id "ansel")
+verified = false
+
+[deploy]
+host = "none"               # runs on Evan's Mac against the Photos library; nothing hosted
+services = []
+domain = ""
+origin_urls_closed = "n/a"  # nothing hosted
+
+[auth]
+scheme = "none"
+access_list = ""
+target = "none"
+
+[data]
+db = "sqlite"               # photo_review.db progress store, keyed by photo UUID (README.md)
+
+[demo]
+status = "none"             # the site card shows docs/cli-demo.gif; no hosted demo
+url = ""
+path = ""
+
+[keys]
+paid = []                   # no API keys read; only ANSEL_DB / ANSEL_CONFIG (README.md); captions
+                            # are written by hand, not by a model
+isolated = "n/a"
+spend_cap = "n/a"
+
+[platform]
+done = []

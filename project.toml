@@ -38,3 +38,13 @@ spend_cap = "n/a"
 
 [platform]
 done = []
+
+[commands]
+dev = "uv run ansel"
+test = "uv run pytest"
+lint = "uv run ruff check . && uv run ty check"
+
+[meta]
+description = "macOS Photos automation CLI"
+language = "python"
+tags = ["portfolio", "tool"]
